@@ -1,25 +1,35 @@
-from telegram import Update, ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
-import requests
 import time
+import requests
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters,
+)
 
 # Replace with your bot token
-BOT_TOKEN = "7709293848:AAFrxDzMg3gFK8Qgkdm1E1D6Z_L87LM0agU"
+BOT_TOKEN = "7709293848:AAFk7gPPMEZHqeGkA1MbTuCcFF53HqWah0s"
 OTP_API_URL = "https://otp.glitchy.workers.dev/send?phone={phone}"
 
-# State for the conversation
+# State for conversation handler
 ASK_PHONES = range(1)
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command handler"""
+    """Start command handler."""
     await update.message.reply_text(
         "Welcome to the OTP Bot!\n\nPlease provide the phone numbers separated by commas to send OTPs (e.g., `+1234567890, +9876543210`).",
         parse_mode=ParseMode.MARKDOWN,
     )
     return ASK_PHONES
 
+
 async def ask_phones(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send 50 OTPs to each phone number with a 5-second gap"""
+    """Send 50 OTPs to each phone number with a 5-second gap."""
     try:
         # Parse phone numbers
         phone_numbers = [phone.strip() for phone in update.message.text.split(",")]
@@ -91,15 +101,17 @@ async def ask_phones(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation"""
+    """Cancel the conversation."""
     await update.message.reply_text(
         "Operation canceled. If you want to start over, type /start."
     )
     return ConversationHandler.END
 
+
 def main():
-    """Main function to set up the bot"""
+    """Main function to set up the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Conversation handler with states
@@ -115,6 +127,7 @@ def main():
 
     # Start the bot
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
