@@ -1,63 +1,101 @@
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ConversationHandler,
-    ContextTypes,
-    filters,
-)
+from telegram import Update, ParseMode
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 import requests
+import time
 
 # Replace with your bot token
-BOT_TOKEN = "7709293848:AAGFYabjOhNuVAlxQBDWeDLCOXoCGbg0qos"
+BOT_TOKEN = "7709293848:AAFrxDzMg3gFK8Qgkdm1E1D6Z_L87LM0agU"
 OTP_API_URL = "https://otp.glitchy.workers.dev/send?phone={phone}"
 
-# Define states for the conversation
-ASK_MESSAGE, ASK_PHONE, ASK_COUNT = range(3)
+# State for the conversation
+ASK_PHONES = range(1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
-    await update.message.reply_text("Welcome! Please provide the custom message you'd like to send along with the OTP.")
-    return ASK_MESSAGE
+    await update.message.reply_text(
+        "Welcome to the OTP Bot!\n\nPlease provide the phone numbers separated by commas to send OTPs (e.g., `+1234567890, +9876543210`).",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return ASK_PHONES
 
-async def ask_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the custom message and ask for the phone number"""
-    context.user_data["custom_message"] = update.message.text.strip()
-    await update.message.reply_text("Got it! Now, please provide the phone number to send the OTP.")
-    return ASK_PHONE
-
-async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the phone number and ask for the number of OTPs to send"""
-    context.user_data["phone_number"] = update.message.text.strip()
-    await update.message.reply_text("How many OTPs would you like to send?")
-    return ASK_COUNT
-
-async def ask_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send the requested number of OTPs along with the custom message"""
+async def ask_phones(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send 50 OTPs to each phone number with a 5-second gap"""
     try:
-        count = int(update.message.text.strip())
-        phone_number = context.user_data.get("phone_number", "")
-        custom_message = context.user_data.get("custom_message", "")
-        
-        for _ in range(count):
-            # Call the Send OTP API
-            response = requests.get(OTP_API_URL.format(phone=phone_number))
-            if response.status_code != 200 or response.json().get("status") != 1:
-                await update.message.reply_text(f"Failed to send OTP to {phone_number}.")
-                return ConversationHandler.END
-        
-        await update.message.reply_text(f"Success! {count} OTPs have been sent to {phone_number}.\n\nCustom Message: {custom_message}")
-    except ValueError:
-        await update.message.reply_text("Please enter a valid number.")
+        # Parse phone numbers
+        phone_numbers = [phone.strip() for phone in update.message.text.split(",")]
+
+        # Notify the user that processing is starting
+        await update.message.reply_text(
+            f"Starting to send OTPs to the following numbers:\n\n{', '.join(phone_numbers)}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+        # Send OTPs to each phone number
+        for phone_number in phone_numbers:
+            await update.message.reply_text(
+                f"🚀 Sending OTPs to *{phone_number}*...",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+            for i in range(50):  # Send 50 OTPs
+                response = requests.get(OTP_API_URL.format(phone=phone_number))
+                if response.status_code == 200 and response.json().get("status") == 1:
+                    await update.message.reply_text(
+                        f"✅ OTP {i + 1}/50 successfully sent to {phone_number}.",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"⚠️ Failed to send OTP {i + 1}/50 to {phone_number}. Retrying...",
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    # Retry up to 3 times
+                    retries = 3
+                    success = False
+                    for retry in range(retries):
+                        time.sleep(2)  # Wait before retrying
+                        retry_response = requests.get(OTP_API_URL.format(phone=phone_number))
+                        if retry_response.status_code == 200 and retry_response.json().get("status") == 1:
+                            success = True
+                            await update.message.reply_text(
+                                f"✅ OTP {i + 1}/50 successfully sent to {phone_number} on retry {retry + 1}.",
+                                parse_mode=ParseMode.MARKDOWN,
+                            )
+                            break
+                    if not success:
+                        await update.message.reply_text(
+                            f"❌ Giving up on OTP {i + 1}/50 for {phone_number} after {retries} retries.",
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                        break
+
+                # Wait 1 second between each OTP
+                time.sleep(1)
+
+            # Notify the user after completing 50 OTPs for the number
+            await update.message.reply_text(
+                f"🎉 Completed sending 50 OTPs to *{phone_number}*. Waiting 5 seconds before the next number.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            time.sleep(5)
+
+        await update.message.reply_text(
+            "✅ All OTPs have been sent successfully to all provided phone numbers.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
     except Exception as e:
-        await update.message.reply_text(f"Error: {str(e)}")
-    
+        await update.message.reply_text(
+            f"❌ An error occurred: `{str(e)}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation"""
-    await update.message.reply_text("Operation canceled.")
+    await update.message.reply_text(
+        "Operation canceled. If you want to start over, type /start."
+    )
     return ConversationHandler.END
 
 def main():
@@ -68,9 +106,7 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            ASK_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_message)],
-            ASK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
-            ASK_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_count)],
+            ASK_PHONES: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phones)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
